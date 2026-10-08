@@ -16,19 +16,21 @@ const sessionRoutes = require('./routes/sessionRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 
+const { sanitizeBaseUrl } = require('./config/network');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Configure Production & Development CORS
 const allowedOrigins = [
-  process.env.PUBLIC_APP_URL,
-  process.env.VITE_API_URL,
-  process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  sanitizeBaseUrl(process.env.PUBLIC_APP_URL),
+  sanitizeBaseUrl(process.env.VITE_API_URL),
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ? sanitizeBaseUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) : null,
+  process.env.VERCEL_URL ? sanitizeBaseUrl(process.env.VERCEL_URL) : null,
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000'
-].filter(Boolean).map(url => url.replace(/\/$/, ''));
+].filter(Boolean);
 
 const corsOptions = {
   origin: function (origin, callback) {

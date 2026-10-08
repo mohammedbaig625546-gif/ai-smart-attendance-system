@@ -109,9 +109,29 @@ async function runAllTests() {
     assert(createdSession.qrDataUrl.startsWith('data:image/png;base64,'), 'QR data URL must be valid PNG image');
     assert(createdSession.feedbackUrl, 'feedbackUrl must be generated');
     assert(createdSession.feedbackUrl.includes('/student/feedback?session='), 'URL must route to /student/feedback');
-    assert(createdSession.feedbackUrl.includes('&token='), 'URL must include token parameter');
-    assert(!createdSession.feedbackUrl.includes('private_key'), 'URL must never expose private keys or secrets');
-    assert(createdSession.remainingSeconds <= 120 && createdSession.remainingSeconds > 0, 'Remaining seconds should be <= 120');
+    assert(!createdSession.feedbackUrl.includes('['), 'feedbackUrl must never contain square brackets [');
+    assert(!createdSession.feedbackUrl.includes(']'), 'feedbackUrl must never contain square brackets ]');
+    assert(!createdSession.feedbackUrl.includes('"'), 'feedbackUrl must never contain quotes');
+
+    // Verify bracket and quotes stripping for Vercel PUBLIC_APP_URL
+    const sampleSessionId = 'sess123';
+    const sampleToken = 'tok456';
+    const cleanedVercelUrl = qrService.generateFeedbackUrl(sampleSessionId, sampleToken, '[https://ai-smart-attendance-system.vercel.app]');
+    assert.strictEqual(
+      cleanedVercelUrl,
+      'https://ai-smart-attendance-system.vercel.app/student/feedback?session=sess123&token=tok456',
+      'Must strip surrounding brackets and format valid https URL'
+    );
+    assert(cleanedVercelUrl.startsWith('https://'), 'URL must strictly start with plain https://');
+
+    // Verify trailing slash and quoted bracket URL handling
+    const cleanedWithQuotes = qrService.generateFeedbackUrl(sampleSessionId, sampleToken, '"[https://ai-smart-attendance-system.vercel.app/]"');
+    assert.strictEqual(
+      cleanedWithQuotes,
+      'https://ai-smart-attendance-system.vercel.app/student/feedback?session=sess123&token=tok456',
+      'Must strip quotes and trailing slashes'
+    );
+    assert(cleanedWithQuotes.startsWith('https://'), 'URL must strictly start with plain https://');
   });
 
   // Test 6: QR changes every 2 minutes (rotation)

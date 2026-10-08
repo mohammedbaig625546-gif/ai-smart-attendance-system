@@ -6,7 +6,7 @@
 
 const { getDb } = require('../config/firebase');
 const { createTokenPayload, validateToken, generateQrDataUrl, computeTokenHash } = require('./qrService');
-const { getPublicAppUrl } = require('../config/network');
+const { getPublicAppUrl, sanitizeBaseUrl } = require('../config/network');
 
 // Active rotation intervals in memory for running sessions
 const activeRotationTimers = new Map();
@@ -101,7 +101,7 @@ async function startSession({ teacherId, classId, subjectGroupId, latitude, long
     ...sessionData,
     qrDataUrl,
     feedbackUrl,
-    publicBaseUrl: customBaseUrl || getPublicAppUrl(),
+    publicBaseUrl: sanitizeBaseUrl(customBaseUrl || getPublicAppUrl()),
     remainingSeconds: Math.floor((tokenPayload.expiresAtMs - Date.now()) / 1000)
   };
 }
@@ -186,7 +186,7 @@ async function rotateQrToken(sessionId, customBaseUrl) {
     ...updateData,
     qrDataUrl,
     feedbackUrl,
-    publicBaseUrl: customBaseUrl || getPublicAppUrl(),
+    publicBaseUrl: sanitizeBaseUrl(customBaseUrl || getPublicAppUrl()),
     remainingSeconds: Math.floor((tokenPayload.expiresAtMs - Date.now()) / 1000)
   };
 }

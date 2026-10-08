@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { getPublicAppUrl } = require('../config/network');
+const { getPublicAppUrl, sanitizeBaseUrl } = require('../config/network');
 
 const TOKEN_LIFETIME_MS = 2 * 60 * 1000; // Exactly 2 minutes (120,000 ms)
 
@@ -124,9 +124,11 @@ function validateToken(suppliedToken, expectedToken, expiresAt, context = {}) {
 /**
  * Builds the clean, clickable Student Feedback URL
  * Strictly in format: ${PUBLIC_APP_URL}/student/feedback?session=${sessionId}&token=${shortToken}
+ * Guarantees no brackets [ ], no quotes, and strictly starts with "https://" in production/Vercel.
  */
 function generateFeedbackUrl(sessionId, token, customBaseUrl) {
-  const baseUrl = (customBaseUrl || getPublicAppUrl()).replace(/\/$/, '');
+  const rawBase = customBaseUrl || getPublicAppUrl();
+  const baseUrl = sanitizeBaseUrl(rawBase);
   const cleanSession = encodeURIComponent((sessionId || '').trim());
   const cleanToken = encodeURIComponent((token || '').trim());
   return `${baseUrl}/student/feedback?session=${cleanSession}&token=${cleanToken}`;
