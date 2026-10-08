@@ -469,18 +469,23 @@ input:focus, select:focus, textarea:focus {
 }
 
 .qr-image-wrapper {
-  background: white;
-  padding: 1.25rem;
+  background: #ffffff;
+  padding: 1.5rem;
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   position: relative;
   margin-bottom: 1.25rem;
+  border: 4px solid #ffffff;
+  display: inline-block;
 }
 
 .qr-image-wrapper img {
-  width: 240px;
-  height: 240px;
+  width: 260px;
+  height: 260px;
   display: block;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 .qr-badge {

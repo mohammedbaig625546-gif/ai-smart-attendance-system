@@ -12,11 +12,11 @@ const { getPublicAppUrl } = require('../config/network');
 const TOKEN_LIFETIME_MS = 2 * 60 * 1000; // Exactly 2 minutes (120,000 ms)
 
 /**
- * Generate a cryptographically secure random token
- * Students cannot forge or guess this token.
+ * Generate a cryptographically secure random short token (20 hex characters, 10 bytes)
+ * Compact length (16-24 chars max) keeps QR matrix density low for effortless phone scanning.
  */
 function generateSecureToken() {
-  return crypto.randomBytes(32).toString('hex');
+  return crypto.randomBytes(10).toString('hex');
 }
 
 /**
@@ -122,28 +122,29 @@ function validateToken(suppliedToken, expectedToken, expiresAt, context = {}) {
 }
 
 /**
- * Builds the full Student Feedback URL
- * e.g. http://192.168.1.89:3000/student/feedback?session=...&token=...
+ * Builds the clean, clickable Student Feedback URL
+ * Strictly in format: ${PUBLIC_APP_URL}/student/feedback?session=${sessionId}&token=${shortToken}
  */
 function generateFeedbackUrl(sessionId, token, customBaseUrl) {
   const baseUrl = (customBaseUrl || getPublicAppUrl()).replace(/\/$/, '');
   const cleanSession = encodeURIComponent((sessionId || '').trim());
   const cleanToken = encodeURIComponent((token || '').trim());
-  return `${baseUrl}/student/feedback?session=${cleanSession}&sessionId=${cleanSession}&token=${cleanToken}&qrToken=${cleanToken}`;
+  return `${baseUrl}/student/feedback?session=${cleanSession}&token=${cleanToken}`;
 }
 
 /**
- * Generates QR Code Data URL containing the navigable Student Feedback URL
+ * Generates QR Code Data URL with large readable blocks and error correction 'L'
+ * Ensures mobile phone cameras and Google Lens recognize it as a clickable web URL.
  */
 async function generateQrDataUrl(sessionId, token, customBaseUrl) {
   const feedbackUrl = generateFeedbackUrl(sessionId, token, customBaseUrl);
 
   const qrDataUrl = await QRCode.toDataURL(feedbackUrl, {
-    errorCorrectionLevel: 'M',
+    errorCorrectionLevel: 'L',
     margin: 2,
     scale: 8,
     color: {
-      dark: '#0f172a',
+      dark: '#000000',
       light: '#ffffff'
     }
   });

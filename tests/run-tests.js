@@ -103,9 +103,9 @@ async function runAllTests() {
   });
 
   // Test 5: Dynamic QR generation with navigable student URL
-  await runAsyncTest(5, 'Test QR generation with secure 64-char token, feedback URL & data URL', async () => {
+  await runAsyncTest(5, 'Test QR generation with secure short token (16-24 chars), feedback URL & data URL', async () => {
     assert(createdSession.currentQrToken, 'Session must have a secure QR token');
-    assert.strictEqual(createdSession.currentQrToken.length, 64, 'Token should be 64 hex characters');
+    assert.strictEqual(createdSession.currentQrToken.length, 20, 'Token should be 20 hex characters (16-24 char range)');
     assert(createdSession.qrDataUrl.startsWith('data:image/png;base64,'), 'QR data URL must be valid PNG image');
     assert(createdSession.feedbackUrl, 'feedbackUrl must be generated');
     assert(createdSession.feedbackUrl.includes('/student/feedback?session='), 'URL must route to /student/feedback');
@@ -121,7 +121,7 @@ async function runAllTests() {
     rotatedSession = await sessionService.rotateQrToken(createdSession.id);
     assert(rotatedSession, 'Rotated session should be returned');
     assert.notStrictEqual(rotatedSession.currentQrToken, initialToken, 'New QR token must differ from old token');
-    assert.strictEqual(rotatedSession.currentQrToken.length, 64, 'New QR token should be 64 hex characters');
+    assert.strictEqual(rotatedSession.currentQrToken.length, 20, 'New QR token should be 20 hex characters');
     assert(rotatedSession.qrDataUrl, 'New QR image should be generated');
   });
 
