@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Classroom - Dynamic QR & Geofenced Feedback System</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- HTML5 QR Code Scanner Library for Student Camera Scan -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <!-- Header Navigation -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <div class="logo-icon">🛡️</div>
+        <div>
+          <h1 class="logo-title">GeoFeedback QR</h1>
+          <p class="logo-subtitle">Dynamic 2-Min QR & Haversine Geofencing System</p>
+        </div>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-tab="teacher-view" id="tabTeacherBtn">
+          👨‍🏫 Teacher Portal
+        </button>
+        <button class="nav-tab" data-tab="student-view" id="tabStudentBtn">
+          🎓 Student Portal
+        </button>
+        <button class="nav-tab" data-tab="attendance-view" id="tabAttendanceBtn">
+          📋 Attendance
+        </button>
+      </nav>
+      <div class="header-status" id="systemStatusBadge">
+        <span class="status-dot online"></span>
+        <span id="systemStatusText">Checking Status...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Banner -->
+  <div id="bannerContainer" class="banner-container"></div>
+
+  <!-- Main Container -->
+  <main class="main-content">
+
+    <!-- ============================================== -->
+    <!-- TEACHER PORTAL -->
+    <!-- ============================================== -->
+    <section id="teacher-view" class="tab-pane active">
+      <div class="portal-grid">
+        
+        <!-- Left Column: Session Controller & Geofence Config -->
+        <div class="card">
+          <div class="card-header">
+            <h2>⚙️ Feedback Session Controls</h2>
+            <span class="badge" id="sessionStatusBadge">Inactive</span>
+          </div>
+
+          <form id="startSessionForm" class="form-grid">
+            <div class="form-group">
+              <label for="classSelect">Select Class</label>
+              <select id="classSelect" required>
+                <option value="CSE" selected>CSE - Computer Science & Engineering</option>
+                <option value="IT">IT - Information Technology</option>
+                <option value="ECE">ECE - Electronics & Comm.</option>
+                <option value="MECH">MECH - Mechanical</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="subjectGroupInput">Subject / Course Group</label>
+              <input type="text" id="subjectGroupInput" value="Semester Core Courses" placeholder="e.g. Semester Core Courses" required>
+            </div>
+
+            <div class="geofence-box">
+              <h3>📍 Classroom Geofence Configuration</h3>
+              <p class="help-text">Students must be physically located within this radius to access or submit feedback.</p>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="classroomLat">Classroom Latitude</label>
+                  <input type="number" step="0.000001" id="classroomLat" value="12.971598" required>
+                </div>
+                <div class="form-group">
+                  <label for="classroomLon">Classroom Longitude</label>
+                  <input type="number" step="0.000001" id="classroomLon" value="77.594566" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnUseCurrentTeacherLoc">
+                  🎯 Auto-Fill Current GPS Location
+                </button>
+              </div>
+
+              <div class="form-group">
+                <label for="classroomRadius">Allowed Radius (Meters)</label>
+                <div class="radius-input-group">
+                  <input type="number" id="classroomRadius" value="50" min="5" max="500" required>
+                  <span class="unit">meters</span>
+                </div>
+                <div class="preset-buttons">
+                  <button type="button" class="preset-btn" data-radius="25">25m</button>
+                  <button type="button" class="preset-btn active" data-radius="50">50m</button>
+                  <button type="button" class="preset-btn" data-radius="100">100m</button>
+                  <button type="button" class="preset-btn" data-radius="200">200m</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="action-buttons">
+              <button type="submit" class="btn btn-primary" id="btnStartSession">
+                🚀 START FEEDBACK SESSION
+              </button>
+              <button type="button" class="btn btn-danger hidden" id="btnStopSession">
+                🛑 STOP FEEDBACK SESSION
+              </button>
+            </div>
+          </form>
+
+          <!-- Manage Feedback Courses Section -->
+          <div class="course-management-area">
+            <div class="card-header border-top">
+              <h2>📚 Manage Feedback Courses</h2>
+              <button type="button" class="btn btn-sm btn-secondary" id="btnToggleAddCourse">
+                + Add Course
+              </button>
+            </div>
+
+            <form id="addCourseForm" class="hidden add-course-form">
+              <input type="text" id="newCourseName" placeholder="New Course Name (e.g. Python)" required>
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnCancelAddCourse">Cancel</button>
+            </form>
+
+            <div class="courses-list" id="teacherCoursesList">
+              <!-- Dynamically populated -->
+              <p class="muted-text">Loading courses...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Live Dynamic QR Code Screen & Analytics -->
+        <div class="card">
+          <!-- Live QR Display -->
+          <div class="qr-display-container" id="qrContainer">
+            <div class="card-header center">
+              <h2>📱 FEEDBACK QR</h2>
+              <p class="subtitle">Display this screen in the classroom for students to scan</p>
+            </div>
+
+            <div id="qrActiveBox" class="qr-box hidden">
+              <div class="qr-image-wrapper">
+                <img id="qrImage" src="" alt="Live Feedback QR Code">
+                <div class="qr-badge">Dynamic 2-Min Token</div>
+              </div>
+
+              <!-- Countdown Timer -->
+              <div class="timer-box">
+                <p class="timer-label">Changes in:</p>
+                <div class="timer-countdown" id="qrCountdown">02:00</div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" id="qrProgressBar"></div>
+                </div>
+                <p class="rotation-notice" id="rotationNotice">Expires after exactly 2 minutes</p>
+              </div>
+
+              <div class="qr-url-box" style="margin: 0.75rem 0; font-size: 0.8rem; background: #0f172a; padding: 0.6rem 0.85rem; border-radius: 8px; border: 1px solid #334155; word-break: break-all; width: 100%; max-width: 480px; text-align: left;">
+                <span style="color: #94a3b8; display: block; margin-bottom: 0.25rem;">🔗 Scannable Student URL (Encoded in QR):</span>
+                <a id="qrUrlLink" href="#" target="_blank" style="color: #38bdf8; text-decoration: underline; font-family: monospace; font-size: 0.8rem;"></a>
+              </div>
+
+              <div class="qr-meta-info">
+                <span>Class: <strong id="activeClassLabel">CSE</strong></span>
+                <span>Radius: <strong id="activeRadiusLabel">50m</strong></span>
+                <button type="button" class="btn btn-sm btn-secondary" id="btnManualRotate">
+                  🔄 Rotate Token Now
+                </button>
+              </div>
+            </div>
+
+            <div id="qrInactivePlaceholder" class="qr-placeholder">
+              <div class="placeholder-icon">🔲</div>
+              <h3>No Active Session</h3>
+              <p>Configure the classroom geofence on the left and click <strong>"START FEEDBACK SESSION"</strong> to generate the live dynamic QR code.</p>
+            </div>
+          </div>
+
+          <!-- Real-Time Teacher Analytics Dashboard -->
+          <div class="analytics-dashboard">
+            <div class="card-header border-top">
+              <h2>📊 Live Feedback Analytics</h2>
+              <button class="btn btn-sm btn-secondary" id="btnRefreshAnalytics">🔄 Refresh</button>
+            </div>
+
+            <div class="analytics-metrics">
+              <div class="metric-card">
+                <span class="metric-value" id="totalResponsesCount">0</span>
+                <span class="metric-label">Total Responses</span>
+              </div>
+              <div class="metric-card">
+                <span class="metric-value" id="overallAvgRating">0.0 / 5</span>
+                <span class="metric-label">Average Rating</span>
+              </div>
+            </div>
+
+            <!-- Course-wise response count and breakdown -->
+            <div class="course-analytics-list" id="courseAnalyticsList">
+              <p class="muted-text">Start a session to collect live responses.</p>
+            </div>
+
+            <!-- Recent Comments -->
+            <div class="feedback-comments-section">
+              <h3>💬 Recent Student Comments</h3>
+              <div id="recentCommentsList" class="comments-list">
+                <p class="muted-text">No comments submitted yet.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- STUDENT PORTAL -->
+    <!-- ============================================== -->
+    <section id="student-view" class="tab-pane">
+      <div class="student-container">
+        
+        <!-- Auth & Identity Card -->
+        <div class="card student-auth-card">
+          <div class="card-header">
+            <h2>🎓 Student Verification</h2>
+            <span class="badge" id="studentAuthBadge">Guest</span>
+          </div>
+          <div class="student-auth-form">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="studentEmailInput">Student Email / ID</label>
+                <input type="email" id="studentEmailInput" placeholder="student@university.edu" value="student1@university.edu">
+              </div>
+              <div class="form-group">
+                <label>&nbsp;</label>
+                <button type="button" class="btn btn-secondary" id="btnSetStudentId">Set Student Identity</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: QR Code Scanner & Location Gate -->
+        <div class="card" id="studentScanCard">
+          <div class="card-header">
+            <h2>📷 Step 1: Scan Classroom QR Code</h2>
+          </div>
+          <p class="help-text">
+            Point your camera at the QR code displayed on the classroom screen.
+            Both a valid unexpired QR token AND your GPS location inside the classroom are required.
+          </p>
+
+          <!-- Interactive Camera Scanner -->
+          <div class="camera-scanner-wrapper">
+            <div id="qrReader" style="width: 100%; max-width: 480px; margin: 0 auto;"></div>
+            <div class="scanner-controls">
+              <button type="button" class="btn btn-primary" id="btnStartCamera">
+                📸 Open Camera Scanner
+              </button>
+              <button type="button" class="btn btn-secondary hidden" id="btnStopCamera">
+                ⏹️ Close Camera
+              </button>
+            </div>
+          </div>
+
+          <div class="divider"><span>OR ENTER TOKEN MANUALLY (TESTING)</span></div>
+
+          <!-- Manual Token Input for testing / environments without webcam -->
+          <div class="manual-token-box">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="manualSessionId">Session ID</label>
+                <input type="text" id="manualSessionId" placeholder="e.g. session-id">
+              </div>
+              <div class="form-group flex-2">
+                <label for="manualQrToken">QR Token (Hex)</label>
+                <input type="text" id="manualQrToken" placeholder="Paste 64-char QR token">
+              </div>
+            </div>
+          </div>
+
+          <!-- GPS Location Status -->
+          <div class="location-status-box" id="studentLocationBox">
+            <h3>📍 GPS Location Status</h3>
+            <p id="studentLocStatusText">Waiting for location permission...</p>
+            <div class="student-coords-display" id="coordsDisplay">
+              <span>Lat: <strong id="dispStudentLat">--</strong></span>
+              <span>Lon: <strong id="dispStudentLon">--</strong></span>
+              <span>Accuracy: <strong id="dispStudentAcc">--</strong></span>
+            </div>
+            <div class="location-action-bar">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnGetStudentLocation">
+                🔄 Refresh GPS Location
+              </button>
+              <!-- Geofence Simulator for testing classroom coords vs outside -->
+              <div class="geo-test-presets">
+                <button type="button" class="preset-badge" id="btnPresetInside">Simulate: Inside Classroom</button>
+                <button type="button" class="preset-badge" id="btnPresetOutside">Simulate: 500m Away (Outside)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Validate Scan Button -->
+          <div class="submit-area">
+            <button type="button" class="btn btn-primary btn-lg" id="btnVerifyScanAndLocation">
+              🔍 Verify QR Token & Location
+            </button>
+          </div>
+
+          <!-- Geofence Rejection Notice -->
+          <div id="geofenceRejectionBox" class="rejection-box hidden">
+            <div class="rejection-icon">❌</div>
+            <h3 id="rejectionTitle">Access Denied</h3>
+            <p id="rejectionMessage">You are outside the classroom. Feedback cannot be submitted from this location.</p>
+            <div class="distance-info" id="rejectionDistanceInfo"></div>
+          </div>
+        </div>
+
+        <!-- Step 2: Course Selection & Multi-Factor Rating Form -->
+        <div class="card hidden" id="studentFeedbackCard">
+          <div class="card-header">
+            <h2>📝 Step 2: Submit Course Feedback</h2>
+            <span class="badge success">Verified Inside Classroom</span>
+          </div>
+
+          <!-- Course Selection (Dynamic from DB) -->
+          <div class="form-group">
+            <label class="section-title">Select Course / Subject</label>
+            <p class="help-text">Courses are loaded dynamically from the database.</p>
+            <div class="course-pill-group" id="studentCoursePills">
+              <!-- Dynamically populated course buttons -->
+            </div>
+            <input type="hidden" id="selectedCourseId" value="">
+          </div>
+
+          <!-- Feedback Questions & Star Ratings -->
+          <div id="feedbackQuestionsContainer" class="questions-container hidden">
+            <div class="selected-course-banner">
+              Feedback for <strong id="activeCourseBannerName">DSA</strong>
+            </div>
+
+            <!-- Question 1 -->
+            <div class="question-row">
+              <div class="question-label">
+                <strong>Teaching Clarity</strong>
+                <span>How clearly were the lectures delivered?</span>
+              </div>
+              <div class="star-rating" data-question="teachingClarity">
+                <span class="star" data-value="1">★</span>
+                <span class="star" data-value="2">★</span>
+                <span class="star" data-value="3">★</span>
+                <span class="star" data-value="4">★</span>
+                <span class="star" data-value="5">★</span>
+                <input type="hidden" id="rating_teachingClarity" value="5">
+              </div>
+            </div>
+
+            <!-- Question 2 -->
+            <div class="question-row">
+              <div class="question-label">
+                <strong>Concept Explanation</strong>
+                <span>How well were complex concepts explained?</span>
+              </div>
+              <div class="star-rating" data-question="conceptExplanation">
+                <span class="star" data-value="1">★</span>
+                <span class="star" data-value="2">★</span>
+                <span class="star" data-value="3">★</span>
+                <span class="star" data-value="4">★</span>
+                <span class="star" data-value="5">★</span>
+                <input type="hidden" id="rating_conceptExplanation" value="4">
+              </div>
+            </div>
+
+            <!-- Question 3 -->
+            <div class="question-row">
+              <div class="question-label">
+                <strong>Practical Examples</strong>
+                <span>How useful were real-world practical examples?</span>
+              </div>
+              <div class="star-rating" data-question="practicalExamples">
+                <span class="star" data-value="1">★</span>
+                <span class="star" data-value="2">★</span>
+                <span class="star" data-value="3">★</span>
+                <span class="star" data-value="4">★</span>
+                <span class="star" data-value="5">★</span>
+                <input type="hidden" id="rating_practicalExamples" value="5">
+              </div>
+            </div>
+
+            <!-- Question 4: Overall Rating -->
+            <div class="question-row highlight">
+              <div class="question-label">
+                <strong>Overall Course Rating</strong>
+                <span>Overall rating for this subject</span>
+              </div>
+              <div class="star-rating" data-question="overallRating">
+                <span class="star" data-value="1">★</span>
+                <span class="star" data-value="2">★</span>
+                <span class="star" data-value="3">★</span>
+                <span class="star" data-value="4">★</span>
+                <span class="star" data-value="5">★</span>
+                <input type="hidden" id="rating_overall" value="5">
+              </div>
+            </div>
+
+            <!-- Optional Comments -->
+            <div class="form-group">
+              <label for="feedbackComments">Additional Comments (Optional)</label>
+              <textarea id="feedbackComments" rows="3" placeholder="Share your suggestions, what went well, or what could be improved..."></textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <div class="submit-area">
+              <button type="button" class="btn btn-primary btn-lg" id="btnSubmitFeedback">
+                🚀 SUBMIT FEEDBACK
+              </button>
+            </div>
+          </div>
+
+          <!-- Submission Success View -->
+          <div id="submissionSuccessBox" class="success-box hidden">
+            <div class="success-icon">✅</div>
+            <h3>Feedback Submitted Successfully!</h3>
+            <p>Your feedback has been verified and securely recorded in Firestore.</p>
+            <button type="button" class="btn btn-secondary" id="btnSubmitAnotherCourse">
+              Submit Feedback for Another Course
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- ATTENDANCE MODULE -->
+    <!-- ============================================== -->
+    <section id="attendance-view" class="tab-pane">
+      <div class="portal-grid">
+        <div class="card">
+          <div class="card-header">
+            <h2>📋 Classroom Attendance Module</h2>
+            <span class="badge">Preserved</span>
+          </div>
+          <p class="help-text">Existing attendance functionality is fully integrated and preserved.</p>
+
+          <form id="attendanceCheckinForm" class="form-grid">
+            <div class="form-group">
+              <label for="attClassSelect">Class</label>
+              <select id="attClassSelect">
+                <option value="CSE">CSE</option>
+                <option value="IT">IT</option>
+                <option value="ECE">ECE</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="attStudentEmail">Student Email / ID</label>
+              <input type="text" id="attStudentEmail" value="student1@university.edu" required>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              ✅ Mark Present (With Geofence Check)
+            </button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>📜 Attendance Records</h2>
+            <button class="btn btn-sm btn-secondary" id="btnRefreshAttendance">Refresh</button>
+          </div>
+          <div id="attendanceRecordsList" class="attendance-table-container">
+            <p class="muted-text">Loading attendance records...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Global Footer -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <p class="footer-text">Designed & Developed by <span class="footer-brand">Baig</span></p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/teacher.js"></script>
+  <script src="js/student.js"></script>
+  <script src="js/attendance.js"></script>
+</body>
+</html>

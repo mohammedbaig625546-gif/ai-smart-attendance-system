@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Student Feedback Portal</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      padding: 1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .mobile-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .mobile-header h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+    .mobile-header p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .step-badge {
+      display: inline-block;
+      background: var(--primary);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.25rem 0.6rem;
+      border-radius: 20px;
+      margin-bottom: 0.5rem;
+    }
+    .insecure-origin-notice {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      margin: 1rem 0;
+    }
+    .insecure-origin-notice code {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+      color: #fef08a;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="mobile-header">
+    <div style="font-size: 2.2rem; margin-bottom: 0.25rem;">🎓</div>
+    <h1>Student Feedback Portal</h1>
+    <p id="portalClassSubtitle">Verifying Feedback Session...</p>
+  </header>
+
+  <div id="bannerContainer"></div>
+
+  <!-- Loading View -->
+  <div id="loadingView" class="card" style="text-align: center; padding: 2.5rem 1.5rem;">
+    <div style="font-size: 2.5rem; animation: spin 1s infinite linear;">⏳</div>
+    <h3 style="margin-top: 1rem;">Validating QR Token...</h3>
+    <p class="help-text">Checking session state and token expiration with the backend.</p>
+  </div>
+
+  <!-- QR Expired or Invalid Error View -->
+  <div id="errorView" class="card rejection-box hidden">
+    <div class="rejection-icon">❌</div>
+    <h3 style="color: #f87171; font-size: 1.25rem; margin-bottom: 0.5rem;">QR Code Expired or Invalid</h3>
+    <p id="errorMessage" style="font-size: 0.95rem; line-height: 1.5; color: #fca5a5;">
+      QR code expired or invalid. Please scan the current QR code displayed by the teacher.
+    </p>
+    <div style="margin-top: 1.5rem;">
+      <button type="button" class="btn btn-secondary" onclick="window.location.reload()">
+        🔄 Try Again
+      </button>
+    </div>
+  </div>
+
+  <!-- Verification Gate: Auth + GPS Geofence -->
+  <div id="verificationGateView" class="card hidden">
+    <span class="step-badge">Step 1: Verification</span>
+    <h2>📍 Classroom Geofence & Identity</h2>
+    <p class="help-text">
+      To prevent remote feedback submission, your university identity and physical presence in the classroom must be verified.
+    </p>
+
+    <!-- Student Email / ID -->
+    <div class="form-group" style="margin-bottom: 1.25rem;">
+      <label for="studentEmailInput">Student Email / Roll Number</label>
+      <input type="email" id="studentEmailInput" value="student1@university.edu" placeholder="student@university.edu" required>
+    </div>
+
+    <!-- GPS Location Acquisition -->
+    <div class="location-status-box">
+      <h3>📡 GPS Location</h3>
+      <p id="locationStatusText">Acquiring device GPS position...</p>
+      <div class="student-coords-display">
+        <span>Lat: <strong id="valLat">--</strong></span>
+        <span>Lon: <strong id="valLon">--</strong></span>
+        <span>Acc: <strong id="valAcc">--</strong></span>
+      </div>
+
+      <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnRetryGps">
+          🎯 Retry GPS Location
+        </button>
+        <button type="button" class="preset-badge" id="btnSimulateInside" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">
+          Simulate Inside Classroom
+        </button>
+      </div>
+
+      <!-- Insecure Origin Explanation for Phones over HTTP -->
+      <div id="httpGpsNotice" class="insecure-origin-notice hidden">
+        <strong>⚠️ Mobile Geolocation Note:</strong><br>
+        Phone browsers restrict GPS on plain HTTP. If GPS fails on your phone over local Wi-Fi, enable:
+        <br><code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> and add your server address, or use HTTPS in production.
+      </div>
+    </div>
+
+    <div class="submit-area" style="margin-top: 1.5rem;">
+      <button type="button" class="btn btn-primary btn-lg" id="btnVerifyLocationAndUnlock" style="width: 100%;">
+        ✅ Verify Geofence & Enter Feedback
+      </button>
+    </div>
+  </div>
+
+  <!-- Feedback Form (Unlocked after Valid QR + Inside Geofence) -->
+  <div id="feedbackFormView" class="card hidden">
+    <span class="step-badge" style="background: var(--success);">Step 2: Course Feedback</span>
+    <h2 style="margin-bottom: 0.25rem;">FEEDBACK</h2>
+    <p class="subtitle" style="margin-bottom: 1rem;">Select Course & Provide Feedback</p>
+
+    <!-- Dynamic Course Selection -->
+    <div class="form-group">
+      <label style="font-size: 0.95rem; font-weight: 700; color: #f8fafc;">Select Course</label>
+      <div class="course-pill-group" id="coursePillGroup" style="margin-top: 0.5rem;">
+        <!-- Dynamically rendered: DSA, Java, Operating Systems, Mathematics, etc. -->
+      </div>
+      <input type="hidden" id="selectedCourseId" value="">
+    </div>
+
+    <!-- Rating Questions -->
+    <div id="questionsArea" class="questions-container hidden" style="margin-top: 1.25rem;">
+      <div class="selected-course-banner">
+        Feedback for <strong id="courseBannerName">DSA</strong>
+      </div>
+
+      <!-- Q1: Teaching clarity -->
+      <div class="question-row">
+        <div class="question-label">
+          <strong>Teaching clarity:</strong>
+          <span>How clearly were lectures delivered?</span>
+        </div>
+        <div class="star-rating" data-name="teachingClarity">
+          <span class="star selected" data-val="1">★</span>
+          <span class="star selected" data-val="2">★</span>
+          <span class="star selected" data-val="3">★</span>
+          <span class="star selected" data-val="4">★</span>
+          <span class="star selected" data-val="5">★</span>
+          <input type="hidden" id="q_teachingClarity" value="5">
+        </div>
+      </div>
+
+      <!-- Q2: How well were concepts explained? -->
+      <div class="question-row">
+        <div class="question-label">
+          <strong>How well were concepts explained?</strong>
+          <span>Depth and clarity of explanation</span>
+        </div>
+        <div class="star-rating" data-name="conceptExplanation">
+          <span class="star selected" data-val="1">★</span>
+          <span class="star selected" data-val="2">★</span>
+          <span class="star selected" data-val="3">★</span>
+          <span class="star selected" data-val="4">★</span>
+          <span class="star" data-val="5">★</span>
+          <input type="hidden" id="q_conceptExplanation" value="4">
+        </div>
+      </div>
+
+      <!-- Q3: How useful were practical examples? -->
+      <div class="question-row">
+        <div class="question-label">
+          <strong>How useful were practical examples?</strong>
+          <span>Relevance to real-world applications</span>
+        </div>
+        <div class="star-rating" data-name="practicalExamples">
+          <span class="star selected" data-val="1">★</span>
+          <span class="star selected" data-val="2">★</span>
+          <span class="star selected" data-val="3">★</span>
+          <span class="star selected" data-val="4">★</span>
+          <span class="star selected" data-val="5">★</span>
+          <input type="hidden" id="q_practicalExamples" value="5">
+        </div>
+      </div>
+
+      <!-- Q4: Overall rating -->
+      <div class="question-row highlight">
+        <div class="question-label">
+          <strong>Overall Rating</strong>
+          <span>Overall subject rating</span>
+        </div>
+        <div class="star-rating" data-name="overallRating">
+          <span class="star selected" data-val="1">★</span>
+          <span class="star selected" data-val="2">★</span>
+          <span class="star selected" data-val="3">★</span>
+          <span class="star selected" data-val="4">★</span>
+          <span class="star selected" data-val="5">★</span>
+          <input type="hidden" id="q_overallRating" value="5">
+        </div>
+      </div>
+
+      <!-- Additional comments -->
+      <div class="form-group" style="margin-top: 0.5rem;">
+        <label for="feedbackComments">Additional comments:</label>
+        <textarea id="feedbackComments" rows="3" placeholder="Share your suggestions, what went well, or what could be improved..."></textarea>
+      </div>
+
+      <!-- Submit button -->
+      <div class="submit-area" style="margin-top: 1rem;">
+        <button type="button" class="btn btn-primary btn-lg" id="btnSubmitFeedback" style="width: 100%;">
+          🚀 SUBMIT FEEDBACK
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submission Success View -->
+  <div id="successView" class="card success-box hidden">
+    <div class="success-icon">✅</div>
+    <h3>Feedback Submitted Successfully!</h3>
+    <p style="color: #6ee7b7; margin-top: 0.5rem;">
+      Your feedback has been verified and securely recorded in Firestore.
+    </p>
+    <div style="margin-top: 1.5rem;">
+      <button type="button" class="btn btn-secondary" id="btnSubmitAnother">
+        Submit Feedback for Another Course
+      </button>
+    </div>
+  </div>
+
+  <!-- Global Footer -->
+  <footer class="app-footer mobile-portal-footer">
+    <div class="footer-container">
+      <p class="footer-text">Designed & Developed by <span class="footer-brand">Baig</span></p>
+    </div>
+  </footer>
+
+  <script>
+    // Global parameters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const rawSessionId = urlParams.get('session') || urlParams.get('sessionId') || '';
+    const rawQrToken = urlParams.get('token') || urlParams.get('qrToken') || '';
+    const sessionId = decodeURIComponent(rawSessionId).trim();
+    const qrToken = decodeURIComponent(rawQrToken).trim();
+
+    let studentLocation = null;
+    let availableCourses = [];
+    let activeCourse = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      initStarRatings();
+      setupEventListeners();
+
+      // Check URL parameters
+      if (!sessionId || !qrToken) {
+        console.warn('[DEBUG] Missing sessionId or qrToken in URL parameters:', { sessionId, qrToken });
+        showError("QR code expired or invalid. Please scan the current QR code displayed by the teacher.");
+        return;
+      }
+
+      // Validate token with backend
+      await validateQrTokenInitially();
+    });
+
+    function setupEventListeners() {
+      document.getElementById('btnRetryGps').addEventListener('click', () => requestDeviceLocation(true));
+      document.getElementById('btnSimulateInside').addEventListener('click', simulateInsideLocation);
+      document.getElementById('btnVerifyLocationAndUnlock').addEventListener('click', verifyLocationAndUnlock);
+      document.getElementById('btnSubmitFeedback').addEventListener('click', submitFeedback);
+      document.getElementById('btnSubmitAnother').addEventListener('click', () => {
+        document.getElementById('successView').classList.add('hidden');
+        document.getElementById('feedbackFormView').classList.remove('hidden');
+        document.getElementById('questionsArea').classList.remove('hidden');
+        document.getElementById('feedbackComments').value = '';
+      });
+    }
+
+    /**
+     * Initial Token Validation with Backend
+     */
+    async function validateQrTokenInitially() {
+      try {
+        console.log('[DEBUG] Validating QR Token with server:', { sessionId, tokenPrefix: qrToken.substring(0, 10) });
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/verify-token?token=${encodeURIComponent(qrToken)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          console.warn('[DEBUG] Server returned failure:', data.error);
+          showError(data.error || "QR code expired or invalid. Please scan the current QR code displayed by the teacher.");
+          return;
+        }
+
+        // Token is valid!
+        console.log('[DEBUG] Token verified successfully! Class:', data.classId, 'Remaining:', data.remainingSeconds, 's');
+        document.getElementById('portalClassSubtitle').innerText = `Class: ${data.classId} • QR Token Valid (${data.remainingSeconds}s remaining)`;
+        document.getElementById('loadingView').classList.add('hidden');
+        document.getElementById('verificationGateView').classList.remove('hidden');
+
+        // Request Device Location
+        requestDeviceLocation(false);
+      } catch (err) {
+        console.error('[DEBUG] Verification network error:', err);
+        showError("QR code expired or invalid. Please scan the current QR code displayed by the teacher.");
+      }
+    }
+
+    /**
+     * Show Error View with the exact required error string
+     */
+    function showError(msg) {
+      document.getElementById('loadingView').classList.add('hidden');
+      document.getElementById('verificationGateView').classList.add('hidden');
+      document.getElementById('feedbackFormView').classList.add('hidden');
+      document.getElementById('errorView').classList.remove('hidden');
+      document.getElementById('errorMessage').innerText = msg;
+    }
+
+    /**
+     * Request High-Accuracy Geolocation from Device
+     */
+    function requestDeviceLocation(manualTrigger) {
+      const statusText = document.getElementById('locationStatusText');
+      if (!navigator.geolocation) {
+        statusText.innerText = "❌ Geolocation is not supported by your browser.";
+        return;
+      }
+
+      statusText.innerText = "⏳ Acquiring GPS position...";
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          studentLocation = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          };
+          document.getElementById('valLat').innerText = pos.coords.latitude.toFixed(6);
+          document.getElementById('valLon').innerText = pos.coords.longitude.toFixed(6);
+          document.getElementById('valAcc').innerText = `±${Math.round(pos.coords.accuracy)}m`;
+          statusText.innerText = "✅ GPS Position Acquired";
+        },
+        err => {
+          studentLocation = null;
+          statusText.innerText = `❌ Location permission denied: ${err.message}`;
+          document.getElementById('httpGpsNotice').classList.remove('hidden');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+
+    /**
+     * Testing simulation helper
+     */
+    function simulateInsideLocation() {
+      // Coordinates matching default classroom
+      studentLocation = {
+        latitude: 12.971598,
+        longitude: 77.594566,
+        accuracy: 5
+      };
+      document.getElementById('valLat').innerText = "12.971598";
+      document.getElementById('valLon').innerText = "77.594566";
+      document.getElementById('valAcc').innerText = "±5m";
+      document.getElementById('locationStatusText').innerText = "✅ Location Simulated Inside Classroom (Distance ~0m)";
+    }
+
+    /**
+     * Verify Geofence and unlock courses
+     */
+    async function verifyLocationAndUnlock() {
+      if (!studentLocation) {
+        alert("Location permission is required to submit feedback.");
+        return;
+      }
+
+      const email = document.getElementById('studentEmailInput').value.trim();
+      if (!email) {
+        alert("Please enter your student email.");
+        return;
+      }
+
+      const uid = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+      const authHeader = `Bearer demo_token_${uid}_student`;
+
+      try {
+        const res = await fetch('/api/feedback/validate-access', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+            'X-User-Uid': uid,
+            'X-User-Email': email,
+            'X-User-Role': 'student'
+          },
+          body: JSON.stringify({
+            sessionId,
+            qrToken,
+            location: studentLocation
+          })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          // Rejection outside geofence or expired token
+          alert(data.error);
+          return;
+        }
+
+        // Access Granted!
+        availableCourses = data.data.courses || [];
+        document.getElementById('verificationGateView').classList.add('hidden');
+        document.getElementById('feedbackFormView').classList.remove('hidden');
+
+        renderCoursePills();
+      } catch (err) {
+        alert(`Validation failed: ${err.message}`);
+      }
+    }
+
+    /**
+     * Render Dynamic Course Selection Pills
+     */
+    function renderCoursePills() {
+      const container = document.getElementById('coursePillGroup');
+      if (!availableCourses || availableCourses.length === 0) {
+        container.innerHTML = '<p class="muted-text">No active courses found.</p>';
+        return;
+      }
+
+      container.innerHTML = availableCourses.map((c, idx) => `
+        <button type="button" class="course-pill ${idx === 0 ? 'active' : ''}" data-id="${c.id}" data-name="${c.name}">
+          [ ${c.name} ]
+        </button>
+      `).join('');
+
+      selectCourse(availableCourses[0].id, availableCourses[0].name);
+
+      const pills = container.querySelectorAll('.course-pill');
+      pills.forEach(p => {
+        p.addEventListener('click', () => {
+          pills.forEach(pill => pill.classList.remove('active'));
+          p.classList.add('active');
+          selectCourse(p.getAttribute('data-id'), p.getAttribute('data-name'));
+        });
+      });
+    }
+
+    function selectCourse(id, name) {
+      activeCourse = { id, name };
+      document.getElementById('selectedCourseId').value = id;
+      document.getElementById('courseBannerName').innerText = name;
+      document.getElementById('questionsArea').classList.remove('hidden');
+    }
+
+    /**
+     * Star Ratings Click Interaction
+     */
+    function initStarRatings() {
+      document.querySelectorAll('.star-rating').forEach(group => {
+        const stars = group.querySelectorAll('.star');
+        const hidden = group.querySelector('input');
+
+        stars.forEach(s => {
+          s.addEventListener('click', () => {
+            const val = parseInt(s.getAttribute('data-val'));
+            hidden.value = val;
+            stars.forEach(star => {
+              const starVal = parseInt(star.getAttribute('data-val'));
+              if (starVal <= val) {
+                star.classList.add('selected');
+                star.style.color = '#fbbf24';
+              } else {
+                star.classList.remove('selected');
+                star.style.color = '#475569';
+              }
+            });
+          });
+        });
+      });
+    }
+
+    /**
+     * Final Submission with double backend validation
+     */
+    async function submitFeedback() {
+      if (!activeCourse) {
+        alert("Please select a course.");
+        return;
+      }
+
+      const email = document.getElementById('studentEmailInput').value.trim();
+      const uid = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+      const authHeader = `Bearer demo_token_${uid}_student`;
+
+      const payload = {
+        sessionId,
+        qrToken,
+        location: studentLocation,
+        subjectId: activeCourse.id,
+        rating: parseInt(document.getElementById('q_overallRating').value || "5"),
+        answers: {
+          teachingClarity: parseInt(document.getElementById('q_teachingClarity').value || "5"),
+          conceptExplanation: parseInt(document.getElementById('q_conceptExplanation').value || "4"),
+          practicalExamples: parseInt(document.getElementById('q_practicalExamples').value || "5")
+        },
+        comments: document.getElementById('feedbackComments').value.trim()
+      };
+
+      try {
+        const res = await fetch('/api/feedback/submit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader,
+            'X-User-Uid': uid,
+            'X-User-Email': email,
+            'X-User-Role': 'student'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          alert(`Submission rejected: ${data.error}`);
+          return;
+        }
+
+        // Success!
+        document.getElementById('feedbackFormView').classList.add('hidden');
+        document.getElementById('successView').classList.remove('hidden');
+      } catch (err) {
+        alert(`Submission error: ${err.message}`);
+      }
+    }
+  </script>
+</body>
+</html>

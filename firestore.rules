@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTeacherOrAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'teacher' || 
+        request.auth.token.role == 'admin' ||
+        request.auth.token.admin == true
+      );
+    }
+
+    // Courses / Subjects collection
+    // Anyone authenticated can read active courses
+    // Only teacher/admin can create, update, or deactivate courses
+    match /courses/{courseId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isTeacherOrAdmin();
+    }
+
+    // Feedback Sessions collection
+    // Anyone authenticated can read session info (needed to see if session is active)
+    // Only teacher/admin can create or update sessions (coordinates, geofence, qr token)
+    // Students can NEVER update session properties, tokens, or status
+    match /feedbackSessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isTeacherOrAdmin();
+    }
+
+    // Feedback collection
+    // CRITICAL SECURITY ENFORCEMENT:
+    // Students must NOT create feedback directly in Firestore.
+    // Feedback MUST be submitted through the secure backend server function
+    // where authentication, active session, unexpired QR token, GPS location,
+    // Haversine geofence distance, course validity, and duplicate submissions
+    // are rigorously re-validated!
+    match /feedback/{feedbackId} {
+      // Teachers and admins can read feedback for analytics and reports
+      allow read: if isTeacherOrAdmin();
+      
+      // Direct client-side write/update/delete is completely blocked for students!
+      // All writes must go through the trusted backend Admin SDK
+      allow write: if false;
+    }
+
+    // Attendance records collection (preserved attendance module)
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only written via verified backend attendance endpoint
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}
